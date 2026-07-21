@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Model artifacts / heavy files — these move via SFTP to/from the cluster, not git
+checkpoints/*
+!checkpoints/.gitkeep
+*.pt
+*.pth
+*.bin
+wandb/
+
+# OS / editor
+.DS_Store
+.vscode/sftp.json
