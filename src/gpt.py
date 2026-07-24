@@ -26,6 +26,7 @@ TODO, in the order the video builds it:
       to/from the cluster over SFTP, not git)
 """
 
+import os
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -37,12 +38,28 @@ torch.manual_seed(1337)
 # pick a config depending on where this runs
 cfg = CLUSTER if device == "cuda" else LOCAL
 
+block_size = cfg["block_size"]
+batch_size = cfg["batch_size"]
+n_embd = cfg["n_embd"]
+n_head = cfg["n_head"]
+n_layer = cfg["n_layer"]
+dropout = cfg["dropout"]
+learning_rate = cfg["learning_rate"]
+max_iters = cfg["max_iters"]
+eval_interval = cfg["eval_interval"]
+eval_iters = cfg["eval_iters"]
+
+
+checkpoint_dir = "../checkpoints"
+os.makedirs(checkpoint_dir, exist_ok=True)
+
 # TODO: everything below
 
 # wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
 # So first, we load the dataset
 
-with open('input.txt','r', encoding='utf-8') as f:
+# with open('input.txt','r', encoding='utf-8') as f:
+with open('../data/input.txt','r', encoding='utf-8') as f:
       text = f.read()
 
 # Now we get all the unique characters that occur in the text
@@ -67,8 +84,8 @@ def get_batch(split):
       data = train_data if split == 'train' else val_data
       # ix is the tensor of starting positions
       ix = torch.randint(len(data) - block_size, (batch_size,))
-      x = torch.stack[data[i:i+block_size] for i in ix]
-      y = torch.stack[data[i+1:block_size+1] for i in ix]
+      x = torch.stack([data[i:i+block_size] for i in ix])
+      y = torch.stack([data[i+1:i+block_size+1] for i in ix])
       x, y = x.to(device), y.to(device)
       return x, y
 
@@ -196,7 +213,7 @@ class GPTLanguageModel(nn.Module):
                   idx_cond = idx[:, -block_size:]
                   logits, loss = self(idx_cond)
                   logits = logits[:, -1, :]
-                  probs = F.softmx(logits, dim=-1)
+                  probs = F.softmax(logits, dim=-1)
                   idx_next = torch.multinomial(probs, num_samples=1)
                   idx = torch.cat((idx, idx_next), dim=1)
             return idx
@@ -210,11 +227,36 @@ print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
 
+# for iter in range(max_iters):
+
+#       if iter % eval_interval == 0 or iter == max_iters - 1:
+#             losses = estimate_loss()
+#             print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+
+#       xb, yb = get_batch('train')
+
+
+#       logits, loss = model(xb, yb)
+#       optimizer.zero_grad(set_to_none=True)
+#       loss.backward()
+#       optimizer.step()
+
+
 for iter in range(max_iters):
 
       if iter % eval_interval == 0 or iter == max_iters - 1:
             losses = estimate_loss()
             print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+
+            checkpoint = {
+                  'iter': iter,
+                  'model_state_dict': model.state_dict(),
+                  'optimizer_state_dict': optimizer.state_dict(),
+                  'train_loss': losses['train'].item(),
+                  'val_loss': losses['val'].item(),
+            }
+            torch.save(checkpoint, os.path.join(checkpoint_dir, f"ckpt_iter{iter}.pt"))
+            torch.save(checkpoint, os.path.join(checkpoint_dir, "ckpt_latest.pt"))
 
       xb, yb = get_batch('train')
 
@@ -223,6 +265,13 @@ for iter in range(max_iters):
       optimizer.zero_grad(set_to_none=True)
       loss.backward()
       optimizer.step()
+
+final_checkpoint = {
+      'iter': max_iters,
+      'model_state_dict': model.state_dict(),
+      'optimizer_state_dict': optimizer.state_dict(),
+}
+torch.save(final_checkpoint, os.path.join(checkpoint_dir, "ckpt_final.pt"))
 
 
 # generate from the model
